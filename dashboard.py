@@ -1,112 +1,123 @@
+
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
+import pandas as pd
+import plotly.express as px
 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="Smart Irrigation",
-    page_icon="🌱",
-    layout="wide"
-)
 
-# ---------- FIREBASE ----------
-try:
-    firebase_admin.get_app()
-except:
-    cred = credentials.Certificate(
-        "smart-irrigation-fd7ae-firebase-adminsdk-fbsvc-adbe6d3445.json"
+def main():
+
+    # PAGE CONFIG
+    st.set_page_config(
+        page_title="Smart Irrigation",
+        page_icon="🌱",
+        layout="wide"
     )
-    firebase_admin.initialize_app(cred)
 
-db = firestore.client()
+    # FIREBASE
+    try:
+        firebase_admin.get_app()
 
-# ---------- GET DATA ----------
-docs = db.collection("sensor_data").stream()
+    except:
+        cred = credentials.Certificate(
+            "smart-irrigation-fd7ae-firebase-adminsdk-fbsvc-adbe6d3445.json"
+        )
 
-data = []
+        firebase_admin.initialize_app(cred)
 
-for doc in docs:
-    data.append(doc.to_dict())
+    db = firestore.client()
 
-# ---------- TITLE ----------
-st.markdown(
-    """
-    <h1 style='text-align: center; color: #7CFC00;'>
-        🌱 Smart Irrigation Dashboard
-    </h1>
-    <hr>
-    """,
-    unsafe_allow_html=True
-)
+    # GET DATA
+    docs = db.collection("sensor_data").stream()
 
-if data:
+    data = []
 
-    latest = data[-1]
+    for doc in docs:
+        data.append(doc.to_dict())
 
-    moisture = latest["moisture"]
-    pump = latest["pump"]
+    # TITLE
+    st.title("🌱 Smart Irrigation Dashboard")
+    
+    
 
-    # ---------- STATUS COLOR ----------
-    if moisture < 30:
-        status = "Dry Soil"
-        color = "red"
-    elif moisture < 60:
-        status = "Normal"
-        color = "orange"
+    # LATEST DATA
+    if data:
+
+        latest = data[-1]
+
+        moisture = latest.get("moisture", 0)
+        pump_status = latest.get("pump", "OFF")
+        timestamp = latest.get("timestamp", "No timestamp")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Soil Moisture", f"{moisture}%")
+        col2.metric("Pump Status", pump_status)
+        col3.metric("Last Update", str(timestamp))
+
     else:
-        status = "Wet Soil"
-        color = "green"
+        st.warning("No data found in Firestore")
 
-    # ---------- TOP CARDS ----------
-    col1, col2, col3 = st.columns(3)
+    #ANALYTICS
+    st.subheader("Analytics")
 
-    with col1:
-        st.metric(
-            label="💧 Moisture",
-            value=f"{moisture}%"
+    df = pd.DataFrame(data)
+
+    if not df.empty:
+       #STATS
+        avg_moisture = df["moisture"].mean()
+        min_moisture = df["moisture"].min()
+        max_moisture = df["moisture"].max()
+ 
+        watering_count = df["pump"].sum()
+        col1,col2,col3,col4 = st.columns(4)
+        
+        col1.metric(
+            "Average Moisture",
+            f"{avg_moisture:.1f}%"
+         )
+
+        col2.metric(
+            "Lowest Moisture",
+            f"{min_moisture}%"
         )
 
-    with col2:
-        st.metric(
-            label="🚰 Pump",
-            value="ON" if pump else "OFF"
+        col3.metric(
+            "Highest Moisture",
+            f"{max_moisture}%"
         )
 
-    with col3:
-        st.markdown(
-            f"""
-            <h3 style='color:{color};'>
-                {status}
-            </h3>
-            """,
-            unsafe_allow_html=True
+        col4.metric(
+            "Pump Activations",
+            watering_count
         )
 
-    st.divider()
 
-    # ---------- RECENT READINGS ----------
-    st.subheader("📋 Recent Readings")
+        #GRAPH
+        st.subheader(" Moisture Over Time")
+
+        fig = px.line(
+            df,
+            y="moisture",
+            title="soil moisture history"
+        )
+
+        st.plotly_chart(fig,use_container_width=True)
+
+
+    # HISTORY
+    st.subheader("Watering History")
 
     for item in reversed(data[-10:]):
 
-        moisture = item["moisture"]
-        pump = item["pump"]
-
-        if moisture < 30:
-            emoji = "🔴"
-        elif moisture < 60:
-            emoji = "🟠"
-        else:
-            emoji = "🟢"
-
-        st.markdown(
-            f"""
-            {emoji} **Moisture:** {moisture}%  
-            🚰 **Pump:** {"ON" if pump else "OFF"}
-            """
+        st.write(
+            f"Moisture: {item.get('moisture')}% | "
+            f"Pump: {item.get('pump')} | "
+            f"Time: {item.get('timestamp')}"
         )
 
-        st.divider()
-
-else:
-    st.warning("No sensor data found.")
+    st.divider()
+    if st.button("LOGOUT"):
+       st.session_state.logged_in=False
+       st.rerun() 

@@ -8,6 +8,23 @@ import busio
 import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import RPi.GPIO as GPIO
+import requests
+
+BOT_TOKEN = "8798271775:AAFJij8PXMw6jV8Kd26xjIpDcz0lT5y8Z-Q"
+CHAT_ID = "8774650083"
+
+def send_telegram_message(message):
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+    data = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+
+    response = requests.post(url , data=data)
+    print(response.text)
+
 
 # Initialize Firebase
 cred = credentials.Certificate("smart-irrigation-fd7ae-firebase-adminsdk-fbsvc-adbe6d3445.json")
@@ -60,6 +77,9 @@ def control_pump(moisture):
 
     if moisture < 40:
        print("pump on")
+       send_telegram_message(
+          "⚠️ Soil moisture low!\nPump activated."
+       )
        GPIO.setup(RELAY_PIN, GPIO.OUT)
        GPIO.output(RELAY_PIN , GPIO.LOW)
        time.sleep(5)
@@ -100,3 +120,5 @@ while True:
 
 
 GPIO.cleanup()
+
+send_telegram_message("Test notification from Raspberry Pi 🌱")
